@@ -116,6 +116,11 @@ def api_dashboard():
     return jsonify(get_dashboard_data())
 
 
+@app.route("/")
+def index():
+    return render_template("dashboard.html", **get_dashboard_data())
+
+
 @app.route("/health")
 def health():
     return {"status": "healthy"}
