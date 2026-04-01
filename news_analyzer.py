@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """
 NEWS & EVENTS IMPACT ANALYZER
-==============================
+=============================
 Analyzes news sentiment and events to impact trade decisions
+Uses Alpha Vantage for better news coverage
 """
 
 import sys
@@ -21,8 +22,60 @@ except:
     subprocess.run([sys.executable, "-m", "pip", "install", "yfinance"])
     import yfinance as yf
 
-# News API (free tier available)
-NEWS_API_KEY = "demo"  # Replace with real key for production
+# Alpha Vantage API - FREE tier (100 calls/day)
+ALPHA_VANTAGE_KEY = "4SC3JS903A9K88BR"
+
+# Symbol mapping for Alpha Vantage (NSE stocks)
+SYMBOL_MAP = {
+    "INFY": "INFY",
+    "TCS": "TCS",
+    "RELIANCE": "RELIANCE",
+    "HDFCBANK": "HDFCBANK",
+    "BAJFINANCE": "BAJFINANCE",
+    "SBIN": "SBIN",
+    "KOTAKBANK": "KOTAKBANK",
+    "ICICIBANK": "ICICIBANK",
+    "AXISBANK": "AXISBANK",
+    "LT": "LT",
+    "TITAN": "TITAN",
+    "SUNPHARMA": "SUNPHARMA",
+    "WIPRO": "WIPRO",
+    "HINDUNILVR": "HINDUNILVR",
+    "NIFTY": "NIFTY",
+    "BANKNIFTY": "BANKNIFTY",
+}
+
+
+def get_alpha_vantage_news_sentiment(symbol):
+    """Get news sentiment from Alpha Vantage API"""
+    try:
+        av_symbol = SYMBOL_MAP.get(symbol, symbol)
+        url = f"https://www.alphavantage.co/query?function=NEWS_SENTIMENT&tickers={av_symbol}&apikey={ALPHA_VANTAGE_KEY}"
+
+        response = requests.get(url, timeout=10)
+        data = response.json()
+
+        if "feed" in data:
+            articles = data["feed"][:3] if len(data["feed"]) > 3 else data["feed"]
+
+            # Get overall sentiment
+            overall_sentiment = data.get("sentiment_score", 0)
+
+            # Get individual article summaries
+            summaries = []
+            for article in articles:
+                summary = article.get("title", "")[:100]
+                summaries.append(summary)
+
+            return {
+                "articles": summaries,
+                "overall_sentiment": overall_sentiment,
+                "source": "Alpha Vantage",
+            }
+    except Exception as e:
+        print(f"Alpha Vantage error: {e}")
+
+    return None
 
 
 def get_stock_news(symbol):
@@ -121,11 +174,53 @@ def get_earning_dates(symbol):
 
 def analyze_impact(symbol):
     """Complete impact analysis for a symbol"""
+    # Try Alpha Vantage first (better data)
+    av_data = get_alpha_vantage_news_sentiment(symbol)
+
+    if av_data and av_data.get("overall_sentiment") is not None:
+        # Use Alpha Vantage data
+        sentiment_score = av_data["overall_sentiment"]
+
+        if sentiment_score > 0.2:
+            sentiment_label = "BULLISH"
+        elif sentiment_score < -0.2:
+            sentiment_label = "BEARISH"
+        else:
+            sentiment_label = "NEUTRAL"
+
+        impact_score = 0
+        reasons = []
+
+        if sentiment_score > 0.3:
+            impact_score += 20
+            reasons.append(f"Positive news (Alpha Vantage: {sentiment_score:.2f})")
+        elif sentiment_score < -0.3:
+            impact_score -= 20
+            reasons.append(f"Negative news (Alpha Vantage: {sentiment_score:.2f})")
+
+        earnings = get_earning_dates(symbol)
+
+        if earnings:
+            days_until = (datetime.fromisoformat(earnings) - datetime.now()).days
+            if days_until > 0 and days_until <= 7:
+                impact_score -= 10
+                reasons.append(f"Earnings in {days_until} days")
+
+        return {
+            "sentiment": sentiment_label,
+            "sentiment_score": sentiment_score,
+            "impact_score": impact_score,
+            "reasons": reasons,
+            "news": av_data.get("articles", []),
+            "earnings_date": earnings,
+            "source": "Alpha Vantage",
+        }
+
+    # Fallback to yfinance
     news = get_stock_news(symbol)
     sentiment, sentiment_label = analyze_sentiment(news)
     earnings = get_earning_dates(symbol)
 
-    # Determine impact score
     impact_score = 0
     reasons = []
 
@@ -136,12 +231,11 @@ def analyze_impact(symbol):
         impact_score -= 20
         reasons.append(f"Negative news ({sentiment_label})")
 
-    # Check for earnings
     if earnings:
         days_until = (datetime.fromisoformat(earnings) - datetime.now()).days
         if days_until > 0 and days_until <= 7:
-            impact_score -= 10  # Pre-earnings uncertainty
-            reasons.append(f"Earnings in {days_until} days - expect volatility")
+            impact_score -= 10
+            reasons.append(f"Earnings in {days_until} days")
 
     return {
         "sentiment": sentiment_label,
@@ -150,6 +244,7 @@ def analyze_impact(symbol):
         "reasons": reasons,
         "news": news,
         "earnings_date": earnings,
+        "source": "yfinance",
     }
 
 
