@@ -1,0 +1,21 @@
+{
+  "total_trades": 1,
+  "sl_hits": 1,
+  "target_hits": 0,
+  "win_rate": 0.0,
+  "avg_win": 0,
+  "avg_loss": -98.20000000000027,
+  "trades": [
+    {
+      "symbol": "TCS",
+      "entry": 2445.4,
+      "sl": 2347.2,
+      "target": 2543.6,
+      "exit": 2347.2,
+      "result": "SL_HIT",
+      "pnl": -98.20000000000027,
+      "time": "2026-04-01T12:30:37.354288",
+      "market_volatility": 1.5
+    }
+  ]
+}

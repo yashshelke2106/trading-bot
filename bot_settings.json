@@ -1,0 +1,11 @@
+{
+  "confidence_threshold": 65,
+  "sl_percent": 2.0,
+  "target_percent": 3.0,
+  "max_trades_per_day": 10,
+  "min_volatility": 0.5,
+  "max_volatility": 3.0,
+  "atr_multiplier": 1.5,
+  "trailing_start_percent": 50,
+  "learning_enabled": true
+}
