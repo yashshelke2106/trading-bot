@@ -7,6 +7,9 @@ yfinance>=0.2.0
 # HTTP Requests
 requests>=2.28.0
 
+# Web Server (for Render)
+flask>=2.0.0
+
 # Dhan API (for live trading - optional)
 # dhanhq>=1.2.0
 

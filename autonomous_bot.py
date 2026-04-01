@@ -15,6 +15,7 @@ import os
 import math
 from datetime import datetime
 from pathlib import Path
+from flask import Flask
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -27,6 +28,19 @@ except:
     import yfinance as yf
 
 from telegram_notifier import TelegramNotifier
+
+app = Flask(__name__)
+
+
+@app.route("/")
+def home():
+    return {"status": "ok", "time": datetime.now().isoformat()}
+
+
+@app.route("/health")
+def health():
+    return {"status": "healthy"}
+
 
 TRADES_FILE = "active_trades.json"
 OPTIONS_FILE = "options_trades.json"
@@ -316,15 +330,37 @@ def check_all_trades():
 
 def main():
     import argparse
+    import threading
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--check", action="store_true", help="Check all trades once")
     parser.add_argument("--monitor", action="store_true", help="Run continuously")
     parser.add_argument("--equity", action="store_true", help="Check equity only")
     parser.add_argument("--options", action="store_true", help="Check options only")
+    parser.add_argument(
+        "--server",
+        action="store_true",
+        help="Run as web server with background monitoring",
+    )
     args = parser.parse_args()
 
-    if args.monitor:
+    # Run background monitoring in a thread
+    def background_monitor():
+        while True:
+            try:
+                check_all_trades()
+            except Exception as e:
+                print(f"Monitor error: {e}")
+            time.sleep(60)
+
+    if args.server or os.environ.get("RENDER"):
+        # Run as web server on Render
+        monitor_thread = threading.Thread(target=background_monitor, daemon=True)
+        monitor_thread.start()
+        port = int(os.environ.get("PORT", 5000))
+        app.run(host="0.0.0.0", port=port)
+
+    elif args.monitor:
         print("Starting 24/7 autonomous trading...")
         print("Monitoring both Equity and Options")
         print("Ctrl+C to stop")
