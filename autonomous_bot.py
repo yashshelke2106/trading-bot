@@ -331,6 +331,7 @@ def check_all_trades():
 def main():
     import argparse
     import threading
+    import sys
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--check", action="store_true", help="Check all trades once")
@@ -353,10 +354,31 @@ def main():
                 print(f"Monitor error: {e}")
             time.sleep(60)
 
+    # Run momentum scanner in background
+    def background_signal_scanner():
+        while True:
+            try:
+                # Import and run momentum scanner
+                sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+                from auto_signal import scan_for_momentum, send_signal_alert
+
+                signals = scan_for_momentum()
+                if signals:
+                    send_signal_alert(signals)
+            except Exception as e:
+                print(f"Signal scan error: {e}")
+            time.sleep(900)  # 15 min
+
     if args.server or os.environ.get("RENDER"):
-        # Run as web server on Render
+        # Run as web server on Render with both monitors
         monitor_thread = threading.Thread(target=background_monitor, daemon=True)
         monitor_thread.start()
+
+        signal_thread = threading.Thread(target=background_signal_scanner, daemon=True)
+        signal_thread.start()
+
+        port = int(os.environ.get("PORT", 5000))
+        app.run(host="0.0.0.0", port=port)
         port = int(os.environ.get("PORT", 5000))
         app.run(host="0.0.0.0", port=port)
 
