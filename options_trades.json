@@ -1,0 +1,41 @@
+{
+  "trades": [
+    {
+      "id": 1,
+      "symbol": "NIFTY",
+      "strike": 22550,
+      "type": "PE",
+      "expiry": "25APR",
+      "direction": "BUY",
+      "entry_premium": 190,
+      "sl_premium": 180,
+      "targets": [205, 235, 255],
+      "lots": 1,
+      "underlying_price": 22331.4,
+      "entry_time": "2026-04-01T13:24:07.043181",
+      "status": "OPEN",
+      "pnl": 0,
+      "notes": "Nifty Put 22550",
+      "symbol_format": "NIFTY 22550 PE 25APR"
+    },
+    {
+      "id": 2,
+      "symbol": "AMBUJACEM",
+      "strike": 6700,
+      "type": "CE",
+      "expiry": "25APR",
+      "direction": "BUY",
+      "entry_premium": 130,
+      "sl_premium": 105,
+      "targets": [150, 170, 200],
+      "lots": 1,
+      "underlying_price": 420.25,
+      "entry_time": "2026-04-01T13:24:07.264068",
+      "status": "OPEN",
+      "pnl": 0,
+      "notes": "Ambuja Cement Call 6700",
+      "symbol_format": "AMBUJACEM 6700 CE 25APR"
+    }
+  ],
+  "closed": []
+}
