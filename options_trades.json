@@ -127,10 +127,120 @@
       "lots": 1,
       "underlying_price": 1280.8,
       "entry_time": "2026-04-01T13:26:22.055943",
-      "status": "OPEN",
-      "pnl": 0,
+      "status": "SL_HIT",
+      "pnl": -1125.0,
       "notes": "",
       "symbol_format": "INFY 1300 PE 25APR"
+    },
+    {
+      "id": 7,
+      "symbol": "NIFTY",
+      "strike": 23400,
+      "type": "CE",
+      "expiry": "25MAY",
+      "direction": "BUY",
+      "entry_premium": 1720.6,
+      "sl_premium": 1290.45,
+      "targets": [
+        2150.75,
+        2580.9,
+        3011.05
+      ],
+      "lots": 1,
+      "underlying_price": 22331.4,
+      "entry_time": "2026-04-01T14:57:59.926588",
+      "status": "OPEN",
+      "pnl": 0,
+      "notes": "Auto-scan: 1.96%",
+      "symbol_format": "NIFTY 23400 CE 25MAY"
+    },
+    {
+      "id": 8,
+      "symbol": "INFY",
+      "strike": 1300,
+      "type": "CE",
+      "expiry": "25MAY",
+      "direction": "BUY",
+      "entry_premium": 190.83,
+      "sl_premium": 143.12,
+      "targets": [
+        238.54,
+        286.25,
+        333.95
+      ],
+      "lots": 1,
+      "underlying_price": 1272.2,
+      "entry_time": "2026-04-01T14:58:00.127115",
+      "status": "OPEN",
+      "pnl": 0,
+      "notes": "Auto-scan: 2.14%",
+      "symbol_format": "INFY 1300 CE 25MAY"
+    },
+    {
+      "id": 9,
+      "symbol": "RELIANCE",
+      "strike": 1400,
+      "type": "CE",
+      "expiry": "25MAY",
+      "direction": "BUY",
+      "entry_premium": 204.89,
+      "sl_premium": 153.67,
+      "targets": [
+        256.11,
+        307.33,
+        358.56
+      ],
+      "lots": 1,
+      "underlying_price": 1365.9,
+      "entry_time": "2026-04-01T14:58:00.304459",
+      "status": "OPEN",
+      "pnl": 0,
+      "notes": "Auto-scan: 2.44%",
+      "symbol_format": "RELIANCE 1400 CE 25MAY"
+    },
+    {
+      "id": 10,
+      "symbol": "BAJFINANCE",
+      "strike": 800,
+      "type": "CE",
+      "expiry": "25MAY",
+      "direction": "BUY",
+      "entry_premium": 98.28,
+      "sl_premium": 73.71,
+      "targets": [
+        122.85,
+        147.42,
+        171.99
+      ],
+      "lots": 1,
+      "underlying_price": 819.0,
+      "entry_time": "2026-04-01T14:58:00.463860",
+      "status": "OPEN",
+      "pnl": 0,
+      "notes": "Auto-scan: -2.38%",
+      "symbol_format": "BAJFINANCE 800 CE 25MAY"
+    },
+    {
+      "id": 11,
+      "symbol": "SBIN",
+      "strike": 1000,
+      "type": "CE",
+      "expiry": "25MAY",
+      "direction": "BUY",
+      "entry_premium": 122.44,
+      "sl_premium": 91.83,
+      "targets": [
+        153.05,
+        183.66,
+        214.27
+      ],
+      "lots": 1,
+      "underlying_price": 1020.3,
+      "entry_time": "2026-04-01T14:58:00.624711",
+      "status": "OPEN",
+      "pnl": 0,
+      "notes": "Auto-scan: -2.03%",
+      "symbol_format": "SBIN 1000 CE 25MAY"
     }
   ],
   "closed": []
