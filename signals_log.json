@@ -1,0 +1,45 @@
+{
+  "signals": [
+    {
+      "timestamp": "2026-04-01T14:57:59.926588",
+      "symbol": "NIFTY",
+      "strike": 23400,
+      "type": "CE"
+    },
+    {
+      "timestamp": "2026-04-01T14:58:00.127115",
+      "symbol": "INFY",
+      "strike": 1300,
+      "type": "CE"
+    },
+    {
+      "timestamp": "2026-04-01T14:58:00.304459",
+      "symbol": "RELIANCE",
+      "strike": 1400,
+      "type": "CE"
+    },
+    {
+      "timestamp": "2026-04-01T14:58:00.463860",
+      "symbol": "BAJFINANCE",
+      "strike": 800,
+      "type": "CE"
+    },
+    {
+      "timestamp": "2026-04-01T14:58:00.624711",
+      "symbol": "SBIN",
+      "strike": 1000,
+      "type": "CE"
+    },
+    {
+      "timestamp": "2026-04-01T15:14:24.849595",
+      "signals_count": 4,
+      "symbols": [
+        "INFY",
+        "RELIANCE",
+        "BAJFINANCE",
+        "SBIN"
+      ]
+    }
+  ],
+  "last_sent": "2026-04-01T15:14:24.849595"
+}

@@ -241,6 +241,94 @@
       "pnl": 0,
       "notes": "Auto-scan: -2.03%",
       "symbol_format": "SBIN 1000 CE 25MAY"
+    },
+    {
+      "id": 12,
+      "symbol": "INFY",
+      "strike": 1300,
+      "type": "CE",
+      "expiry": "25MAY",
+      "direction": "BUY",
+      "entry_premium": 191.59,
+      "sl_premium": 143.69,
+      "targets": [
+        239.49,
+        287.38,
+        335.28
+      ],
+      "lots": 1,
+      "underlying_price": 1277.4,
+      "entry_time": "2026-04-01T15:14:24.400531",
+      "status": "OPEN",
+      "pnl": 0,
+      "notes": "Momentum: +2.13%",
+      "symbol_format": "INFY 1300 CE 25MAY"
+    },
+    {
+      "id": 13,
+      "symbol": "RELIANCE",
+      "strike": 1400,
+      "type": "CE",
+      "expiry": "25MAY",
+      "direction": "BUY",
+      "entry_premium": 205.6,
+      "sl_premium": 154.2,
+      "targets": [
+        257.0,
+        308.4,
+        359.8
+      ],
+      "lots": 1,
+      "underlying_price": 1370.2,
+      "entry_time": "2026-04-01T15:14:24.544467",
+      "status": "OPEN",
+      "pnl": 0,
+      "notes": "Momentum: +1.99%",
+      "symbol_format": "RELIANCE 1400 CE 25MAY"
+    },
+    {
+      "id": 14,
+      "symbol": "BAJFINANCE",
+      "strike": 800,
+      "type": "CE",
+      "expiry": "25MAY",
+      "direction": "BUY",
+      "entry_premium": 98.11,
+      "sl_premium": 73.58,
+      "targets": [
+        122.64,
+        147.16,
+        171.69
+      ],
+      "lots": 1,
+      "underlying_price": 817.6,
+      "entry_time": "2026-04-01T15:14:24.687896",
+      "status": "OPEN",
+      "pnl": 0,
+      "notes": "Momentum: +2.00%",
+      "symbol_format": "BAJFINANCE 800 CE 25MAY"
+    },
+    {
+      "id": 15,
+      "symbol": "SBIN",
+      "strike": 1000,
+      "type": "CE",
+      "expiry": "25MAY",
+      "direction": "BUY",
+      "entry_premium": 244.33,
+      "sl_premium": 183.25,
+      "targets": [
+        305.41,
+        366.5,
+        427.58
+      ],
+      "lots": 1,
+      "underlying_price": 1018.0,
+      "entry_time": "2026-04-01T15:14:24.849595",
+      "status": "OPEN",
+      "pnl": 0,
+      "notes": "Momentum: +3.95%",
+      "symbol_format": "SBIN 1000 CE 25MAY"
     }
   ],
   "closed": []

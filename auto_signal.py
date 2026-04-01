@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
 """
-AUTONOMOUS SIGNAL GENERATOR
-===========================
-Automatically scans market and sends trade opportunities to Telegram
+AUTONOMOUS SIGNAL SCANNER - MOMENTUM TRADING
+============================================
+Automatically scans market for momentum setups and sends to Telegram
 """
 
 import sys
 import json
 import math
 import time
+import os
+import threading
 from datetime import datetime
 from pathlib import Path
 
@@ -23,7 +25,6 @@ except:
     import yfinance as yf
 
 from telegram_notifier import TelegramNotifier
-from options_trader import add_option_trade
 
 SETTINGS_FILE = "bot_settings.json"
 SIGNALS_LOG = "signals_log.json"
@@ -37,7 +38,8 @@ def load_settings():
         "options_sl_percent": 25,
         "options_min_moneyness": -2,
         "options_min_confidence": 70,
-        "scan_interval_minutes": 60,
+        "momentum_threshold": 1.5,  # Minimum % move to trigger
+        "scan_interval_minutes": 15,  # Scan every 15 min
     }
 
 
@@ -47,7 +49,6 @@ def get_market_data():
         nifty = yf.Ticker("^NSEI")
         nifty_info = nifty.info
 
-        # Handle cases where currentPrice might be None
         price = nifty_info.get("currentPrice") or nifty_info.get("dayHigh") or 22300
         prev = nifty_info.get("regularMarketPreviousClose") or price
         day_high = nifty_info.get("dayHigh") or price * 1.005
@@ -57,9 +58,9 @@ def get_market_data():
             change = ((price - prev) / prev) * 100
             volatility = ((day_high - day_low) / price) * 100
 
-            if change > 0.2:
+            if change > 0.3:
                 trend = "BULLISH"
-            elif change < -0.2:
+            elif change < -0.3:
                 trend = "BEARISH"
             else:
                 trend = "SIDEWAYS"
@@ -79,8 +80,8 @@ def get_market_data():
         "change": 0,
         "volatility": 1.5,
         "trend": "SIDEWAYS",
-        "day_high": 22200,
-        "day_low": 21800,
+        "day_high": 22500,
+        "day_low": 22100,
     }
 
 
@@ -89,29 +90,21 @@ def get_stock_data(symbol):
     try:
         ticker = yf.Ticker(f"{symbol}.NS")
         info = ticker.info
+        price = info.get("currentPrice") or info.get("regularMarketPreviousClose")
+        prev = info.get("regularMarketPreviousClose") or price
+
+        change = ((price - prev) / prev) * 100 if price and prev else 0
+
         return {
-            "price": info.get("currentPrice") or info.get("regularMarketPreviousClose"),
-            "change": (
-                (
-                    info.get("currentPrice", 0)
-                    - info.get("regularMarketPreviousClose", 0)
-                )
-                / info.get("regularMarketPreviousClose", 1)
-            )
-            * 100,
-            "volume": info.get("volume", 0),
+            "price": price,
+            "prev": prev,
+            "change": change,
             "high": info.get("dayHigh"),
             "low": info.get("dayLow"),
+            "volume": info.get("volume", 0),
         }
     except:
         return None
-
-
-def check_volume_spike(stock_data):
-    """Check for volume spike"""
-    if not stock_data:
-        return False
-    return stock_data.get("change", 0) > 2  # >2% move = high volume
 
 
 def calculate_option_params(underlying, direction, settings):
@@ -124,13 +117,11 @@ def calculate_option_params(underlying, direction, settings):
     else:
         strike = round(underlying * (1 - moneyness_limit / 100), 0)
 
-    # Round strike appropriately
     if underlying > 10000:
         strike = round(strike / 50) * 50
     else:
         strike = round(strike / 100) * 100
 
-    # Estimate premium
     vol = 0.15 if underlying > 10000 else 0.30
     moneyness = (
         (underlying - strike) / strike
@@ -162,204 +153,199 @@ def calculate_option_params(underlying, direction, settings):
     }
 
 
-def scan_for_signals():
-    """Scan market for trading opportunities"""
+def scan_for_momentum():
+    """Scan for momentum-based trading opportunities"""
     settings = load_settings()
     market = get_market_data()
     telegram = TelegramNotifier()
 
-    print(f"\n[Scanning Market...]")
-    print(f"  Nifty: {market['nifty']} ({market['change']:+.2f}%)")
-    print(f"  Trend: {market['trend']} | Volatility: {market['volatility']:.2f}%")
+    print(f"\n[{datetime.now().strftime('%H:%M:%S')}] Scanning...")
+    print(f"  Market: {market['trend']} ({market['change']:+.2f}%)")
 
     signals = []
-
-    # Only scan in directional markets
-    if market["trend"] == "SIDEWAYS":
-        print("  [SKIP] Market sideways - no directional trades")
-
-        msg = f"""*MARKET SCAN*
-
-Nifty: {market["nifty"]} ({market["change"]:+.2f}%)
-Trend: SIDEWAYS
-Volatility: {market["volatility"]:.2f}%
-
-No clear directional opportunities.
-Waiting for clear trend...
-
-
-Time: {datetime.now().strftime("%H:%M:%S")}"""
-        telegram.send_message(msg)
-        return []
-
-    # Determine option type based on trend
-    option_type = "CE" if market["trend"] == "BULLISH" else "PE"
-    direction = "BUY"
-
-    # Scan indices
-    indices = {
-        "NIFTY": market["nifty"],
-        "BANKNIFTY": get_stock_data("BANKNIFTY").get("price")
-        if get_stock_data("BANKNIFTY")
-        else 50000,
-    }
-
-    print("\n[Scanning Indices]")
-    for symbol, price in indices.items():
-        if not price:
-            continue
-
-        params = calculate_option_params(price, direction, settings)
-
-        # Check if strike is valid (within 2% of underlying)
-        if abs(params["moneyness"]) > 3:
-            print(f"  [SKIP] {symbol}: moneyness {params['moneyness']}% too far")
-            continue
-
-        signal = {
-            "type": "INDEX",
-            "symbol": symbol,
-            "option_type": option_type,
-            "strike": params["strike"],
-            "entry": params["entry"],
-            "sl": params["sl"],
-            "targets": params["targets"],
-            "moneyness": params["moneyness"],
-            "underlying": price,
-            "direction": direction,
-        }
-        signals.append(signal)
-        print(f"  [SIGNAL] {symbol} {params['strike']} {option_type}")
+    momentum_stocks = []
 
     # Scan stocks with momentum
-    print("\n[Scanning Stocks]")
-    stocks = ["INFY", "TCS", "RELIANCE", "HDFCBANK", "BAJFINANCE", "SBIN", "KOTAKBANK"]
+    stocks = [
+        "INFY",
+        "TCS",
+        "RELIANCE",
+        "HDFCBANK",
+        "BAJFINANCE",
+        "SBIN",
+        "KOTAKBANK",
+        "ICICIBANK",
+        "AXISBANK",
+        "LT",
+        "TITAN",
+        "SUNPHARMA",
+        "WIPRO",
+        "HINDUNILVR",
+    ]
 
     for stock in stocks:
         data = get_stock_data(stock)
         if not data or not data.get("price"):
             continue
 
-        # Only pick stocks with strong move (>1.5%)
-        if abs(data.get("change", 0)) < 1.5:
-            continue
+        change = data.get("change", 0)
 
-        params = calculate_option_params(data["price"], direction, settings)
+        # Check if stock has momentum
+        if abs(change) >= settings.get("momentum_threshold", 1.5):
+            momentum_stocks.append(
+                {"symbol": stock, "price": data["price"], "change": change}
+            )
+
+    if not momentum_stocks:
+        print(
+            f"  No momentum stocks found (threshold: {settings.get('momentum_threshold', 1.5)}%)"
+        )
+        return []
+
+    print(f"  Found {len(momentum_stocks)} momentum stocks")
+
+    # Determine direction
+    if market["trend"] == "BULLISH":
+        direction = "BUY"
+        option_type = "CE"
+    elif market["trend"] == "BEARISH":
+        direction = "BUY"
+        option_type = "PE"
+    else:
+        # For sideways, use strongest momentum direction
+        avg_change = sum(s["change"] for s in momentum_stocks) / len(momentum_stocks)
+        if avg_change > 0:
+            direction = "BUY"
+            option_type = "CE"
+        else:
+            direction = "BUY"
+            option_type = "PE"
+
+    # Generate signals for momentum stocks
+    for stock_data in momentum_stocks[:5]:  # Max 5
+        params = calculate_option_params(stock_data["price"], direction, settings)
 
         if abs(params["moneyness"]) > 3:
             continue
 
         signal = {
-            "type": "STOCK",
-            "symbol": stock,
+            "type": "MOMENTUM",
+            "symbol": stock_data["symbol"],
             "option_type": option_type,
             "strike": params["strike"],
             "entry": params["entry"],
             "sl": params["sl"],
             "targets": params["targets"],
             "moneyness": params["moneyness"],
-            "underlying": data["price"],
+            "underlying": stock_data["price"],
             "direction": direction,
+            "stock_change": stock_data["change"],
         }
         signals.append(signal)
         print(
-            f"  [SIGNAL] {stock} {params['strike']} {option_type} ({data['change']:+.2f}%)"
+            f"    {stock_data['symbol']}: {stock_data['change']:+.2f}% -> {params['strike']} {option_type}"
         )
 
     return signals
 
 
 def send_signal_alert(signals):
-    """Send signal alerts to Telegram"""
+    """Send signal alerts to Telegram immediately"""
     if not signals:
         return
 
     telegram = TelegramNotifier()
 
     # Save to log
-    log = {"signals": []}
+    log = {"signals": [], "last_sent": None}
     if Path(SIGNALS_LOG).exists():
         with open(SIGNALS_LOG, "r") as f:
             log = json.load(f)
 
-    msg = f"""*NEW TRADE OPPORTUNITIES*
+    # Check if we already sent recently (avoid spam)
+    last_sent = log.get("last_sent")
+    if last_sent:
+        last_time = datetime.fromisoformat(last_sent)
+        if (datetime.now() - last_time).seconds < 300:  # 5 min cooldown
+            print("  [SKIP] Already sent recently")
+            return
+
+    msg = f"""*MOMENTUM TRADE ALERT*
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Market: {signals[0].get("direction", "BUY")} {signals[0].get("option_type", "")}
+Market Trend: {signals[0].get("option_type", "")}
 Signals Found: {len(signals)}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 """
 
-    for sig in signals[:5]:  # Max 5 signals
+    for sig in signals:
         expiry = "25MAY" if datetime.now().day < 20 else "25JUN"
 
-        msg += f"""📊 {sig["symbol"]} {sig["strike"]} {sig["option_type"]}
+        # Add to portfolio
+        try:
+            from options_trader import add_option_trade
+
+            add_option_trade(
+                symbol=sig["symbol"],
+                strike=sig["strike"],
+                option_type=sig["option_type"],
+                expiry=expiry,
+                direction=sig["direction"],
+                entry_premium=sig["entry"],
+                sl_premium=sig["sl"],
+                targets_list=sig["targets"],
+                lots=1,
+                notes=f"Momentum: {sig['stock_change']:+.2f}%",
+            )
+        except:
+            pass
+
+        msg += f"""[{sig["stock_change"]:+.2f}%] {sig["symbol"]} {sig["strike"]} {sig["option_type"]}
    Entry: Rs {sig["entry"]}
    SL: Rs {sig["sl"]}
    Targets: {sig["targets"][0]} | {sig["targets"][1]} | {sig["targets"][2]}
    Moneyness: {sig["moneyness"]}%
-   Underlying: Rs {sig["underlying"]}
 
 """
 
-        # Add to portfolio
-        add_option_trade(
-            symbol=sig["symbol"],
-            strike=sig["strike"],
-            option_type=sig["option_type"],
-            expiry=expiry,
-            direction=sig["direction"],
-            entry_premium=sig["entry"],
-            sl_premium=sig["sl"],
-            targets_list=sig["targets"],
-            lots=1,
-            notes=f"Auto-scan: {sig['moneyness']}%",
-        )
+    msg += f"""━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Auto-generated based on momentum
+Time: {datetime.now().strftime("%H:%M:%S")}"""
 
-        log["signals"].append(
-            {
-                "timestamp": datetime.now().isoformat(),
-                "symbol": sig["symbol"],
-                "strike": sig["strike"],
-                "type": sig["option_type"],
-            }
-        )
-
-    msg += f"""
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Time: {datetime.now().strftime("%H:%M:%S")}
-
-Reply with '/accept' to take trade
-Reply with '/skip' to ignore
-"""
+    log["signals"].append(
+        {
+            "timestamp": datetime.now().isoformat(),
+            "signals_count": len(signals),
+            "symbols": [s["symbol"] for s in signals],
+        }
+    )
+    log["last_sent"] = datetime.now().isoformat()
 
     with open(SIGNALS_LOG, "w") as f:
         json.dump(log, f, indent=2)
 
     telegram.send_message(msg)
-    print(f"\n[Sent {len(signals)} signals to Telegram]")
-    print("[Added to portfolio]")
+    print(f"\n[SENT {len(signals)} signals to Telegram]")
 
 
-def run_autonomous_scan():
-    """Run autonomous scanning loop"""
+def run_continuous_scan():
+    """Run continuous scanning loop"""
     settings = load_settings()
-    interval = settings.get("scan_interval_minutes", 60)
+    interval = settings.get("scan_interval_minutes", 15)
 
     print(f"\n{'=' * 60}")
-    print(f"AUTONOMOUS SIGNAL SCANNER")
-    print(f"Interval: {interval} minutes")
+    print(f"MOMENTUM SCANNER - ACTIVE")
+    print(f"Scanning every {interval} minutes")
     print(f"{'=' * 60}")
 
     while True:
         try:
-            signals = scan_for_signals()
+            signals = scan_for_momentum()
 
             if signals:
                 send_signal_alert(signals)
 
-            print(f"\n[Next scan in {interval} minutes...]")
             time.sleep(interval * 60)
 
         except KeyboardInterrupt:
@@ -379,12 +365,13 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args.monitor:
-        run_autonomous_scan()
+        run_continuous_scan()
     elif args.scan:
-        signals = scan_for_signals()
+        signals = scan_for_momentum()
         if signals:
             send_signal_alert(signals)
         else:
-            print("No signals found")
+            print("No momentum signals found")
     else:
-        print("Usage: python auto_signal.py --scan / --monitor")
+        # Default: run continuous
+        run_continuous_scan()
