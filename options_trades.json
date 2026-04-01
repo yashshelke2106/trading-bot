@@ -9,12 +9,16 @@
       "direction": "BUY",
       "entry_premium": 190,
       "sl_premium": 180,
-      "targets": [205, 235, 255],
+      "targets": [
+        205,
+        235,
+        255
+      ],
       "lots": 1,
       "underlying_price": 22331.4,
       "entry_time": "2026-04-01T13:24:07.043181",
-      "status": "OPEN",
-      "pnl": 0,
+      "status": "TARGET_205",
+      "pnl": 1125,
       "notes": "Nifty Put 22550",
       "symbol_format": "NIFTY 22550 PE 25APR"
     },
@@ -27,14 +31,106 @@
       "direction": "BUY",
       "entry_premium": 130,
       "sl_premium": 105,
-      "targets": [150, 170, 200],
+      "targets": [
+        150,
+        170,
+        200
+      ],
       "lots": 1,
       "underlying_price": 420.25,
       "entry_time": "2026-04-01T13:24:07.264068",
-      "status": "OPEN",
-      "pnl": 0,
+      "status": "SL_HIT",
+      "pnl": -1875,
       "notes": "Ambuja Cement Call 6700",
       "symbol_format": "AMBUJACEM 6700 CE 25APR"
+    },
+    {
+      "id": 3,
+      "symbol": "BANKNIFTY",
+      "strike": 52000,
+      "type": "CE",
+      "expiry": "25APR",
+      "direction": "BUY",
+      "entry_premium": 150.0,
+      "sl_premium": 120.0,
+      "targets": [
+        180.0,
+        210.0,
+        250.0
+      ],
+      "lots": 1,
+      "underlying_price": 50275.35,
+      "entry_time": "2026-04-01T13:25:54.327741",
+      "status": "TARGET_180.0",
+      "pnl": 2250.0,
+      "notes": "",
+      "symbol_format": "BANKNIFTY 52000 CE 25APR"
+    },
+    {
+      "id": 4,
+      "symbol": "RELIANCE",
+      "strike": 3000,
+      "type": "PE",
+      "expiry": "25APR",
+      "direction": "BUY",
+      "entry_premium": 80.0,
+      "sl_premium": 65.0,
+      "targets": [
+        100.0,
+        120.0,
+        140.0
+      ],
+      "lots": 1,
+      "underlying_price": 1373.0,
+      "entry_time": "2026-04-01T13:26:05.011996",
+      "status": "SL_HIT",
+      "pnl": -1125.0,
+      "notes": "",
+      "symbol_format": "RELIANCE 3000 PE 25APR"
+    },
+    {
+      "id": 5,
+      "symbol": "TCS",
+      "strike": 4200,
+      "type": "CE",
+      "expiry": "25APR",
+      "direction": "BUY",
+      "entry_premium": 100.0,
+      "sl_premium": 80.0,
+      "targets": [
+        130.0,
+        160.0,
+        200.0
+      ],
+      "lots": 1,
+      "underlying_price": 2425.7,
+      "entry_time": "2026-04-01T13:26:12.153271",
+      "status": "SL_HIT",
+      "pnl": -1500.0,
+      "notes": "",
+      "symbol_format": "TCS 4200 CE 25APR"
+    },
+    {
+      "id": 6,
+      "symbol": "INFY",
+      "strike": 1300,
+      "type": "PE",
+      "expiry": "25APR",
+      "direction": "BUY",
+      "entry_premium": 70.0,
+      "sl_premium": 55.0,
+      "targets": [
+        90.0,
+        110.0,
+        130.0
+      ],
+      "lots": 1,
+      "underlying_price": 1280.8,
+      "entry_time": "2026-04-01T13:26:22.055943",
+      "status": "OPEN",
+      "pnl": 0,
+      "notes": "",
+      "symbol_format": "INFY 1300 PE 25APR"
     }
   ],
   "closed": []
