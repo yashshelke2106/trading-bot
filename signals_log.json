@@ -9,7 +9,15 @@
         "BAJFINANCE",
         "SBIN"
       ]
+    },
+    {
+      "timestamp": "2026-04-01T15:55:11.378244",
+      "signals_count": 2,
+      "symbols": [
+        "INFY",
+        "RELIANCE"
+      ]
     }
   ],
-  "last_sent": "2026-04-01T15:26:00.393871"
+  "last_sent": "2026-04-01T15:55:11.378244"
 }
