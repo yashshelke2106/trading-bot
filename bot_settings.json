@@ -1,15 +1,6 @@
 {
-  "confidence_threshold": 65,
-  "sl_percent": 2.0,
-  "target_percent": 3.0,
-  "max_trades_per_day": 10,
-  "min_volatility": 0.5,
-  "max_volatility": 3.0,
-  "atr_multiplier": 1.5,
-  "trailing_start_percent": 50,
-  "learning_enabled": true,
   "options_sl_percent": 25,
-  "options_min_moneyness": -2,
-  "options_avoid_trend": true,
-  "options_min_confidence": 70
+  "options_min_moneyness": -5,
+  "momentum_threshold": 1.5,
+  "avoid_earnings_days": 3
 }

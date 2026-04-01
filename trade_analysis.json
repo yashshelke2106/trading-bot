@@ -1,10 +1,10 @@
 {
-  "total_trades": 1,
-  "sl_hits": 1,
+  "total_trades": 3,
+  "sl_hits": 3,
   "target_hits": 0,
   "win_rate": 0.0,
   "avg_win": 0,
-  "avg_loss": -98.20000000000027,
+  "avg_loss": -54.5133333333334,
   "trades": [
     {
       "symbol": "TCS",
@@ -15,6 +15,28 @@
       "result": "SL_HIT",
       "pnl": -98.20000000000027,
       "time": "2026-04-01T12:30:37.354288",
+      "market_volatility": 1.5
+    },
+    {
+      "symbol": "BAJFINANCE",
+      "entry": 835.9,
+      "sl": 819.18,
+      "target": 856.8,
+      "exit": 819.18,
+      "result": "SL_HIT",
+      "pnl": -16.720000000000027,
+      "time": "2026-04-01T15:47:23.046220",
+      "market_volatility": 1.5
+    },
+    {
+      "symbol": "TCS",
+      "entry": 2431.0,
+      "sl": 2382.38,
+      "target": 2491.77,
+      "exit": 2382.38,
+      "result": "SL_HIT",
+      "pnl": -48.61999999999989,
+      "time": "2026-04-01T15:47:24.118308",
       "market_volatility": 1.5
     }
   ]

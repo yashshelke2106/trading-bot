@@ -91,10 +91,10 @@
     "sl": 819.18,
     "target": 856.8,
     "entry_time": "2026-04-01T13:17:15.489907",
-    "status": "OPEN",
-    "pnl": 0,
-    "exit_price": null,
-    "exit_time": null,
+    "status": "SL_HIT",
+    "pnl": -16.720000000000027,
+    "exit_price": 819.18,
+    "exit_time": "2026-04-01T15:47:23.046220",
     "notes": "Confidence: 95%"
   },
   {
@@ -147,10 +147,10 @@
     "sl": 2382.38,
     "target": 2491.77,
     "entry_time": "2026-04-01T13:17:15.489907",
-    "status": "OPEN",
-    "pnl": 0,
-    "exit_price": null,
-    "exit_time": null,
+    "status": "SL_HIT",
+    "pnl": -48.61999999999989,
+    "exit_price": 2382.38,
+    "exit_time": "2026-04-01T15:47:24.118308",
     "notes": "Confidence: 90.56509389969898%"
   }
 ]
