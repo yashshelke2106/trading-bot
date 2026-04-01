@@ -153,14 +153,49 @@ def calculate_option_params(underlying, direction, settings):
     }
 
 
+def get_monthly_expiry():
+    """Get next monthly expiry date in Indian format"""
+    from datetime import datetime, timedelta
+
+    today = datetime.now()
+    year = today.year
+
+    # Monthly expiry dates for NSE (usually last Thursday of month)
+    expiry_dates = [
+        ("JAN", datetime(year, 1, 25)),
+        ("FEB", datetime(year, 2, 22)),
+        ("MAR", datetime(year, 3, 28)),
+        ("APR", datetime(year, 4, 25)),
+        ("MAY", datetime(year, 5, 30)),
+        ("JUN", datetime(year, 6, 27)),
+        ("JUL", datetime(year, 7, 31)),
+        ("AUG", datetime(year, 8, 29)),
+        ("SEP", datetime(year, 9, 26)),
+        ("OCT", datetime(year, 10, 31)),
+        ("NOV", datetime(year, 11, 28)),
+        ("DEC", datetime(year, 12, 26)),
+    ]
+
+    # Find next expiry
+    for month_name, expiry in expiry_dates:
+        if today <= expiry + timedelta(days=3):
+            # Format: "28 APR" or use month abbreviation
+            return f"{month_name}'25"  # e.g., "APR'25"
+
+    # If past all dates, use next year's Jan
+    return f"JAN'{year + 1}"
+
+
 def scan_for_momentum():
     """Scan for momentum-based trading opportunities"""
     settings = load_settings()
     market = get_market_data()
     telegram = TelegramNotifier()
 
+    expiry = get_monthly_expiry()
     print(f"\n[{datetime.now().strftime('%H:%M:%S')}] Scanning...")
     print(f"  Market: {market['trend']} ({market['change']:+.2f}%)")
+    print(f"  Next Expiry: {expiry}")
 
     signals = []
     momentum_stocks = []
@@ -280,7 +315,7 @@ Signals Found: {len(signals)}
 """
 
     for sig in signals:
-        expiry = "25MAY" if datetime.now().day < 20 else "25JUN"
+        expiry = get_monthly_expiry()
 
         # Add to portfolio
         try:
@@ -301,7 +336,9 @@ Signals Found: {len(signals)}
         except:
             pass
 
-        msg += f"""[{sig["stock_change"]:+.2f}%] {sig["symbol"]} {sig["strike"]} {sig["option_type"]}
+        msg += f"""[MOMENTUM: {sig["stock_change"]:+.2f}%]
+
+{sig["symbol"]} {sig["strike"]} {sig["option_type"]} {expiry}
    Entry: Rs {sig["entry"]}
    SL: Rs {sig["sl"]}
    Targets: {sig["targets"][0]} | {sig["targets"][1]} | {sig["targets"][2]}
