@@ -15,9 +15,8 @@ import os
 import math
 from datetime import datetime
 from pathlib import Path
-from flask import Flask
-
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from flask import Flask, render_template, jsonify
+import random
 
 try:
     import yfinance as yf
@@ -27,14 +26,94 @@ except:
     subprocess.run([sys.executable, "-m", "pip", "install", "yfinance"])
     import yfinance as yf
 
-from telegram_notifier import TelegramNotifier
+try:
+    from telegram_notifier import TelegramNotifier
+except:
+    TelegramNotifier = None
 
 app = Flask(__name__)
 
+TEMPLATE_DIR = Path(__file__).parent / "templates"
+app.template_folder = str(TEMPLATE_DIR)
 
-@app.route("/")
-def home():
-    return {"status": "ok", "time": datetime.now().isoformat()}
+
+def get_dashboard_data():
+    """Generate dashboard data from trade files"""
+    total_pnl = "₹0"
+    open_trades = 0
+    win_rate = 33
+    signals_today = 0
+    trades = []
+    signals = []
+    market_sentiment = "sideways"
+    volatility = 1.5
+
+    try:
+        if Path("options_trades.json").exists():
+            with open("options_trades.json", "r") as f:
+                options_trades = json.load(f)
+                closed = [
+                    t
+                    for t in options_trades
+                    if t.get("status")
+                    in ["TARGET_HIT", "SL_HIT", "TARGET_205", "TARGET_180"]
+                ]
+                targets = len([t for t in closed if "TARGET" in t.get("status", "")])
+                sls = len([t for t in closed if "SL" in t.get("status", "")])
+                total = targets + sls
+                if total > 0:
+                    win_rate = int((targets / total) * 100)
+
+                pnl = sum(t.get("pnl", 0) for t in closed)
+                total_pnl = f"₹{pnl:,.0f}" if pnl >= 0 else f"-₹{abs(pnl):,.0f}"
+                signals_today = len(options_trades)
+    except:
+        pass
+
+    try:
+        if Path("active_trades.json").exists():
+            with open("active_trades.json", "r") as f:
+                active = json.load(f)
+                open_trades = len([t for t in active if t.get("status") == "OPEN"])
+                for t in active[:6]:
+                    current_price = t.get("entry", t.get("entry", 0))
+                    pnl_val = (
+                        (current_price - t.get("entry", 0)) / t.get("entry", 1) * 100
+                    )
+                    trades.append(
+                        {
+                            "symbol": t.get("symbol", "N/A"),
+                            "direction": t.get("direction", "LONG"),
+                            "entry": f"{t.get('entry', 0):.2f}",
+                            "current": f"{current_price:.2f}",
+                            "pnl": f"{pnl_val:+.2f}%",
+                            "pnl_class": "positive" if pnl_val >= 0 else "negative",
+                            "status": t.get("status", "OPEN"),
+                        }
+                    )
+    except:
+        pass
+
+    return {
+        "total_pnl": total_pnl,
+        "open_trades": open_trades,
+        "win_rate": win_rate,
+        "signals_today": signals_today,
+        "active_today": open_trades,
+        "trades": trades,
+        "signals": signals,
+        "market_sentiment": market_sentiment,
+        "market_sentiment_label": "Sideways",
+        "volatility": volatility,
+        "pnl_change": "0%",
+        "pnl_change_class": "positive",
+        "pnl_change_icon": "arrow-up",
+    }
+
+
+@app.route("/api/dashboard")
+def api_dashboard():
+    return jsonify(get_dashboard_data())
 
 
 @app.route("/health")
