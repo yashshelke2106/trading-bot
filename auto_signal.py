@@ -19,6 +19,13 @@ sys.path.insert(0, "C:/Users/yashs/Documents/Trading Bot/file1")
 # Import time predictor
 from time_predictor import estimate_time_to_target, calculate_probability
 
+# Import news analyzer
+from news_analyzer import (
+    analyze_impact,
+    analyze_market_sentiment,
+    adjust_signal_based_on_news,
+)
+
 try:
     import yfinance as yf
 except:
@@ -279,6 +286,17 @@ def scan_for_momentum():
             "direction": direction,
             "stock_change": stock_data["change"],
         }
+
+        # Analyze news impact
+        try:
+            impact = analyze_impact(stock_data["symbol"])
+            signal = adjust_signal_based_on_news(signal, impact)
+            signal["news_sentiment"] = impact["sentiment"]
+            if impact["reasons"]:
+                signal["news_impact"] = impact["reasons"]
+        except:
+            pass
+
         signals.append(signal)
         print(
             f"    {stock_data['symbol']}: {stock_data['change']:+.2f}% -> {params['strike']} {option_type}"
@@ -366,7 +384,7 @@ Signals Found: {len(signals)}
    Target 3: Rs {sig["targets"][2]}
    
    Win Prob: {prob["target"]} | Vol: {prob["volatility"]}
-   Moneyness: {sig["moneyness"]}%
+   News: {sig.get("news_sentiment", "N/A")} {sig["moneyness"]}%
 
 """
 
