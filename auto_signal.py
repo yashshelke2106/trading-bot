@@ -16,6 +16,9 @@ from pathlib import Path
 
 sys.path.insert(0, "C:/Users/yashs/Documents/Trading Bot/file1")
 
+# Import time predictor
+from time_predictor import estimate_time_to_target, calculate_probability
+
 try:
     import yfinance as yf
 except:
@@ -317,6 +320,23 @@ Signals Found: {len(signals)}
     for sig in signals:
         expiry = get_monthly_expiry()
 
+        # Get time prediction
+        time1 = estimate_time_to_target(
+            sig["entry"], sig["targets"][0], sig["symbol"], sig["option_type"]
+        )
+        time2 = estimate_time_to_target(
+            sig["entry"], sig["targets"][1], sig["symbol"], sig["option_type"]
+        )
+
+        # Get probability
+        prob = calculate_probability(
+            sig["entry"],
+            sig["sl"],
+            sig["targets"][0],
+            sig["symbol"],
+            sig["option_type"],
+        )
+
         # Add to portfolio
         try:
             from options_trader import add_option_trade
@@ -339,9 +359,13 @@ Signals Found: {len(signals)}
         msg += f"""[MOMENTUM: {sig["stock_change"]:+.2f}%]
 
 {sig["symbol"]} {sig["strike"]} {sig["option_type"]} {expiry}
-   Entry: Rs {sig["entry"]}
-   SL: Rs {sig["sl"]}
-   Targets: {sig["targets"][0]} | {sig["targets"][1]} | {sig["targets"][2]}
+   Entry: Rs {sig["entry"]} | SL: Rs {sig["sl"]}
+   
+   Target 1: Rs {sig["targets"][0]} (Est: {time1})
+   Target 2: Rs {sig["targets"][1]} (Est: {time2})
+   Target 3: Rs {sig["targets"][2]}
+   
+   Win Prob: {prob["target"]} | Vol: {prob["volatility"]}
    Moneyness: {sig["moneyness"]}%
 
 """
