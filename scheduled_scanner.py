@@ -8,7 +8,7 @@ import asyncio
 import json
 import os
 import sys
-from datetime import datetime, time
+from datetime import datetime, time, timedelta
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
@@ -63,7 +63,45 @@ class ScheduledScanner:
         market_start = time(9, 15)
         market_end = time(15, 30)
 
-        return market_start <= now_time <= market_end
+        if not (market_start <= now_time <= market_end):
+            return False
+
+        if self.is_market_holiday(now):
+            return False
+
+        return True
+
+    def is_market_holiday(self, date) -> bool:
+        holidays_2026 = [
+            "2026-01-01",
+            "2026-01-26",
+            "2026-02-26",
+            "2026-03-10",
+            "2026-03-30",
+            "2026-04-03",
+            "2026-04-14",
+            "2026-05-01",
+            "2026-05-12",
+            "2026-08-15",
+            "2026-08-27",
+            "2026-10-02",
+            "2026-10-21",
+            "2026-11-04",
+            "2026-11-05",
+            "2026-12-25",
+        ]
+        date_str = date.strftime("%Y-%m-%d")
+        return date_str in holidays_2026
+
+    def get_next_trading_day(self) -> str:
+        now = datetime.now()
+        days_ahead = 1
+        while days_ahead <= 7:
+            next_day = now + timedelta(days=days_ahead)
+            if next_day.weekday() < 5 and not self.is_market_holiday(next_day):
+                return next_day.strftime("%A, %d %B")
+            days_ahead += 1
+        return "Monday"
 
     async def get_candles(self, symbol: str) -> list:
         try:
@@ -239,7 +277,51 @@ class ScheduledScanner:
         return False
 
     async def scan_and_send(self):
-        if not self.is_market_hours():
+        now = datetime.now()
+        now_time = now.time()
+
+        if now.weekday() >= 5:
+            if now_time.hour == 9 and now_time.minute < 30:
+                next_day = self.get_next_trading_day()
+                self.telegram.send_message(
+                    f"*MARKET CLOSED*\n\n"
+                    f"Today is weekend\n"
+                    f"Next trading day: {next_day}\n\n"
+                    f"Will resume signals on market open!"
+                )
+            return
+
+        if self.is_market_holiday(now):
+            if now_time.hour == 9 and now_time.minute < 30:
+                next_day = self.get_next_trading_day()
+                self.telegram.send_message(
+                    f"*MARKET HOLIDAY*\n\n"
+                    f"Today is a market holiday\n"
+                    f"Next trading day: {next_day}\n\n"
+                    f"Will resume signals on market open!"
+                )
+            return
+
+        market_start = time(9, 15)
+        market_end = time(15, 30)
+
+        if now_time < market_start:
+            if now_time.hour == 9 and now_time.minute < 30:
+                self.telegram.send_message(
+                    f"*MARKET OPENING SOON*\n\n"
+                    f"Current time: {now.strftime('%H:%M')}\n"
+                    f"Market opens: 9:15 AM\n"
+                    f"First scan in 15 minutes!"
+                )
+            return
+
+        if now_time > market_end:
+            self.telegram.send_message(
+                f"*MARKET CLOSED*\n\n"
+                f"Trading session ended\n"
+                f"Next scan: Tomorrow 9:15 AM\n"
+                f"Next trading day: {self.get_next_trading_day()}"
+            )
             return
 
         symbols = [
@@ -273,7 +355,7 @@ class ScheduledScanner:
         if strong_signals:
             strong_signals.sort(key=lambda x: x["signal"]["confidence"], reverse=True)
 
-            header = f"*MARKET SCAN - {datetime.now().strftime('%H:%M')}*\n\n"
+            header = f"*MARKET SCAN - {now.strftime('%H:%M')}*\n\n"
             header += f"Signals: {len(strong_signals)}\n"
             header += f"Market: OPEN\n\n"
 
@@ -309,6 +391,14 @@ Trend: {"BULLISH" if s["ema_bullish"] else "BEARISH"}
 *CONF: {s["confidence"]:.0f}%*"""
 
                 self.telegram.send_message(msg)
+        else:
+            if now_time.hour == 10 and now_time.minute < 15:
+                self.telegram.send_message(
+                    f"*MARKET SCAN - {now.strftime('%H:%M')}*\n\n"
+                    f"No quality signals\n"
+                    f"Market: OPEN\n"
+                    f"RSI levels: Neutral"
+                )
 
 
 async def main():

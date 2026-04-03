@@ -7,7 +7,7 @@ import requests
 import json
 import os
 import sys
-from datetime import datetime
+from datetime import datetime, time, timedelta
 from typing import Dict, List
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -44,6 +44,49 @@ class TradingTelegramBot:
         }
 
         self.stats = self.load_stats()
+
+    def is_market_holiday(self, date) -> bool:
+        holidays_2026 = [
+            "2026-01-01",
+            "2026-01-26",
+            "2026-02-26",
+            "2026-03-10",
+            "2026-03-30",
+            "2026-04-03",
+            "2026-04-14",
+            "2026-05-01",
+            "2026-05-12",
+            "2026-08-15",
+            "2026-08-27",
+            "2026-10-02",
+            "2026-10-21",
+            "2026-11-04",
+            "2026-11-05",
+            "2026-12-25",
+        ]
+        return date.strftime("%Y-%m-%d") in holidays_2026
+
+    def is_market_open(self) -> tuple:
+        now = datetime.now()
+        now_time = now.time()
+
+        if now.weekday() >= 5:
+            return False, "Weekend"
+        if self.is_market_holiday(now):
+            return False, "Market Holiday"
+        if now_time < time(9, 15):
+            return False, f"Pre-market (opens 9:15 AM)"
+        if now_time > time(15, 30):
+            return False, f"Market closed (reopens tomorrow)"
+        return True, "Open"
+
+    def get_next_trading_day(self) -> str:
+        now = datetime.now()
+        for i in range(1, 8):
+            next_day = now + timedelta(days=i)
+            if next_day.weekday() < 5 and not self.is_market_holiday(next_day):
+                return next_day.strftime("%A, %d %B")
+        return "Monday"
 
     def load_config(self):
         config_file = os.path.join(os.path.dirname(__file__), "telegram_config.json")
@@ -316,20 +359,39 @@ Trend: {"BULLISH" if s["ema_bullish"] else "BEARISH"}
 
     async def handle_command(self, command: str, chat_id: int):
         if command == "/start":
+            is_open, status = self.is_market_open()
+            next_day = self.get_next_trading_day()
+
             msg = f"""*TRADING BOT ACTIVE*
 
-Welcome! I'm your automated trading assistant.
+Welcome! Automated trading assistant.
+
+*Market Status:* {status}
+{"" if is_open else f"Next trading day: {next_day}"}
 
 *Commands:*
 /scan - Scan all stocks
-/signals - Show current signals
+/signals - Current signals
 /top5 - Top 5 trades
 /nifty - NIFTY analysis
-/accuracy - Bot accuracy stats
-/help - Show all commands
+/accuracy - Bot accuracy
+/market - Check market status
+/help - All commands"""
+            self.send_message(chat_id, msg)
 
-*Mode: Signals Only*
-Auto-execute when accuracy > 60%"""
+        elif command == "/market":
+            is_open, status = self.is_market_open()
+            next_day = self.get_next_trading_day()
+
+            msg = f"""*MARKET STATUS*
+
+Status: {status}
+Current time: {datetime.now().strftime("%H:%M")}
+
+Market hours: 9:15 AM - 3:30 PM
+Trading days: Mon-Fri
+
+{"" if is_open else f"Next trading day: {next_day}"}"""
             self.send_message(chat_id, msg)
 
         elif command == "/help":
@@ -368,6 +430,13 @@ Target: 60% accuracy"""
             self.send_message(chat_id, msg)
 
         elif command == "/nifty":
+            is_open, status = self.is_market_open()
+            if not is_open:
+                self.send_message(
+                    chat_id, f"Market is {status}.\nUse /market for details."
+                )
+                return
+
             self.send_message(chat_id, "Scanning NIFTY...")
             data = await self.scan_single("NIFTY")
             if data:
@@ -377,6 +446,13 @@ Target: 60% accuracy"""
                 self.send_message(chat_id, "Error scanning NIFTY. Try again later.")
 
         elif command == "/scan":
+            is_open, status = self.is_market_open()
+            if not is_open:
+                self.send_message(
+                    chat_id, f"Market is {status}.\nUse /market for details."
+                )
+                return
+
             self.send_message(chat_id, "Scanning all stocks...")
 
             symbols = [
@@ -421,6 +497,13 @@ Target: 60% accuracy"""
                 self.send_message(chat_id, "No signals found. Market may be ranging.")
 
         elif command == "/signals":
+            is_open, status = self.is_market_open()
+            if not is_open:
+                self.send_message(
+                    chat_id, f"Market is {status}.\nUse /market for details."
+                )
+                return
+
             self.send_message(chat_id, "Fetching current signals...")
 
             symbols = [
@@ -455,6 +538,13 @@ Target: 60% accuracy"""
                 )
 
         elif command == "/top5":
+            is_open, status = self.is_market_open()
+            if not is_open:
+                self.send_message(
+                    chat_id, f"Market is {status}.\nUse /market for details."
+                )
+                return
+
             self.send_message(chat_id, "Finding top 5 trades...")
 
             symbols = [
