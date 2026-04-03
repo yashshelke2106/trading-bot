@@ -1,0 +1,52 @@
+name: Deploy to PythonAnywhere
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.12'
+    
+    - name: Install dependencies
+      run: |
+        pip install pandas numpy requests websockets
+    
+    - name: Deploy to Server
+      env:
+        SSH_KEY: ${{ secrets.PYTHONANYWHERE_SSH_KEY }}
+        SERVER_HOST: ${{ secrets.PYTHONANYWHERE_HOST }}
+        SERVER_USER: ${{ secrets.PYTHONANYWHERE_USER }}
+      run: |
+        # Install SSH client
+        apt-get update && apt-get install -y openssh-client
+        
+        # Setup SSH key
+        mkdir -p ~/.ssh
+        echo "$SSH_KEY" > ~/.ssh/id_rsa
+        chmod 600 ~/.ssh/id_rsa
+        
+        # Stop old bot
+        ssh $SERVER_USER@$SERVER_HOST "pkill -f telegram_bot.py || true"
+        
+        # Sync files
+        rsync -avz --exclude='__pycache__' --exclude='*.pyc' --exclude='.git' \
+          ./ $SERVER_USER@$SERVER_HOST:~/trading_bot/
+        
+        # Install dependencies on server
+        ssh $SERVER_USER@$SERVER_HOST "cd ~/trading_bot && pip install pandas numpy requests websockets -q"
+        
+        # Restart bot
+        ssh $SERVER_USER@$SERVER_HOST "cd ~/trading_bot && nohup python telegram_bot.py > bot.log 2>&1 &"
+        
+        echo "Deployed successfully!"

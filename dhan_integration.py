@@ -50,9 +50,11 @@ class DhanAPIClient:
 
         self.instruments = {
             "NIFTY": ("9999200000", "INDEX", "NSE"),
+            "SENSEX": ("9999600000", "INDEX", "BSE"),
             "BANKNIFTY": ("9999100000", "INDEX", "NSE"),
             "FINNIFTY": ("35026", "INDEX", "NSE"),
             "NSE_INDEX": ("35026", "INDEX", "NSE"),
+            "BSE_INDEX": ("9999600000", "INDEX", "BSE"),
             "TCS": ("532540", "EQUITY", "NSE"),
             "HDFCBANK": ("500180", "EQUITY", "NSE"),
             "ICICIBANK": ("532174", "EQUITY", "NSE"),
@@ -458,7 +460,7 @@ class DhanAPIClient:
         print(f"[DHAN] Placing BRACKET order: {side} {quantity} {symbol}")
         print(f"  Entry: {price} | SL: {stop_loss} | Target: {target}")
 
-        if paper_mode or self.credentials.get("paper_mode", False):
+        if self.credentials.get("paper_mode", False):
             return {
                 "status": "simulated",
                 "order_id": f"PAPER_BRK_{datetime.now().strftime('%Y%m%d%H%M%S')}",
