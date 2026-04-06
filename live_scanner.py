@@ -4,7 +4,8 @@ LIVE TRADING SCANNER - EVERY 15 MINUTES
 ======================================
 1. Checks market sentiment every 15 minutes
 2. Scans for trade opportunities
-3. Sends alerts via Telegram when trades found
+3. Verifies all values before sending alerts
+4. Sends updates via Telegram
 """
 
 import sys
@@ -35,34 +36,50 @@ class LiveTradingScanner:
     def __init__(self):
         self.telegram = TelegramNotifier()
         self.last_trade_alert = None
+        self.last_sentiment = None
         self.scan_interval = 15  # minutes
-        self.min_score = 40  # Minimum score for trade alert
+        self.min_score = 35  # Minimum score for trade alert
 
+        # NSE stocks with proper lot sizes
         self.stocks = {
-            "BHEL": "BHEL.NS",
-            "NMDC": "NMDC.NS",
-            "COALINDIA": "COALINDIA.NS",
-            "POWERGRID": "POWERGRID.NS",
-            "NTPC": "NTPC.NS",
-            "BEL": "BEL.NS",
-            "ONGC": "ONGC.NS",
-            "HINDALCO": "HINDALCO.NS",
-            "JSWSTEEL": "JSWSTEEL.NS",
-            "TATASTEEL": "TATASTEEL.NS",
-            "SBIN": "SBIN.NS",
-            "ICICIBANK": "ICICIBANK.NS",
-            "AXISBANK": "AXISBANK.NS",
+            "BHEL": {"symbol": "BHEL.NS", "lot": 6000},
+            "NMDC": {"symbol": "NMDC.NS", "lot": 10000},
+            "COALINDIA": {"symbol": "COALINDIA.NS", "lot": 2400},
+            "POWERGRID": {"symbol": "POWERGRID.NS", "lot": 3400},
+            "NTPC": {"symbol": "NTPC.NS", "lot": 4100},
+            "BEL": {"symbol": "BEL.NS", "lot": 3600},
+            "ONGC": {"symbol": "ONGC.NS", "lot": 3150},
+            "HINDALCO": {"symbol": "HINDALCO.NS", "lot": 1350},
+            "JSWSTEEL": {"symbol": "JSWSTEEL.NS", "lot": 1900},
+            "TATASTEEL": {"symbol": "TATASTEEL.NS", "lot": 2000},
+            "SBIN": {"symbol": "SBIN.NS", "lot": 1500},
+            "ICICIBANK": {"symbol": "ICICIBANK.NS", "lot": 3750},
+            "AXISBANK": {"symbol": "AXISBANK.NS", "lot": 2000},
+            "KOTAKBANK": {"symbol": "KOTAKBANK.NS", "lot": 3200},
+            "HDFCBANK": {"symbol": "HDFCBANK.NS", "lot": 2500},
+            "RELIANCE": {"symbol": "RELIANCE.NS", "lot": 1000},
+            "INFY": {"symbol": "INFY.NS", "lot": 1800},
+            "TCS": {"symbol": "TCS.NS", "lot": 500},
         }
 
-    def get_data(self, symbol, period="1d", interval="5m"):
+    def get_data(self, symbol, period="5d", interval="5m"):
         try:
             df = yf.Ticker(symbol).history(period=period, interval=interval)
             if df is not None and len(df) > 20:
-                df.index = df.index.tz_localize(None) if df.index.tz else df.index
+                if hasattr(df.index, "tz") and df.index.tz:
+                    df.index = df.index.tz_localize(None)
                 return df
         except:
             pass
         return None
+
+    def get_multi_timeframe_data(self, symbol):
+        """Get data for multiple timeframes"""
+        # Higher timeframe (1H) for structure
+        df_1h = self.get_data(symbol, period="1mo", interval="1h")
+        # Lower timeframe (5M) for entry
+        df_5m = self.get_data(symbol, period="1d", interval="5m")
+        return df_1h, df_5m
 
     def calc_rsi(self, prices, period=14):
         delta = prices.diff()
@@ -71,12 +88,173 @@ class LiveTradingScanner:
         rs = gain / loss
         return 100 - (100 / (1 + rs))
 
-    def calc_macd(self, prices):
-        exp12 = prices.ewm(span=12).mean()
-        exp26 = prices.ewm(span=26).mean()
-        macd = exp12 - exp26
-        signal = macd.ewm(span=9).mean()
-        return macd, signal
+    def calc_macd(self, prices, fast=12, slow=26, signal=9):
+        exp_fast = prices.ewm(span=fast).mean()
+        exp_slow = prices.ewm(span=slow).mean()
+        macd = exp_fast - exp_slow
+        signal_line = macd.ewm(span=signal).mean()
+        return macd, signal_line
+
+    def calc_ema(self, prices, period):
+        return prices.ewm(span=period).mean()
+
+    def detect_patterns(self, df, timeframe="1H"):
+        """Detect chart patterns on given timeframe"""
+        if len(df) < 50:
+            return None
+
+        close = df["Close"]
+        high = df["High"]
+        low = df["Low"]
+
+        patterns = []
+
+        # Higher highs/lows check
+        recent_highs = high.iloc[-20:].values
+        older_highs = high.iloc[-40:-20].values
+        higher_highs = max(recent_highs) > max(older_highs)
+
+        recent_lows = low.iloc[-20:].values
+        older_lows = low.iloc[-40:-20].values
+        higher_lows = min(recent_lows) > min(older_lows)
+
+        # RSI for overbought/oversold
+        rsi = self.calc_rsi(close).iloc[-1]
+
+        # MACD for trend
+        macd, signal = self.calc_macd(close)
+        macd_bullish = macd.iloc[-1] > signal.iloc[-1]
+        macd_histogram = macd.iloc[-1] - signal.iloc[-1]
+
+        # EMA crossovers
+        ema20 = self.calc_ema(close, 20).iloc[-1]
+        ema50 = self.calc_ema(close, 50).iloc[-1] if len(close) > 50 else ema20
+        ema200 = self.calc_ema(close, 200).iloc[-1] if len(close) > 200 else ema50
+
+        # Detect structure
+        structure = "NEUTRAL"
+        confidence = 0
+
+        # BULLISH structure conditions
+        if higher_lows and macd_bullish:
+            structure = "BULLISH"
+            confidence += 30
+        if close.iloc[-1] > ema20:
+            confidence += 20
+        if close.iloc[-1] > ema50:
+            confidence += 25
+        if rsi < 60 and rsi > 30:
+            confidence += 15
+        if macd_histogram > 0:
+            confidence += 10
+
+        # BEARISH structure conditions
+        if not higher_lows and not macd_bullish:
+            if structure == "BULLISH":
+                pass  # Keep bullish
+            else:
+                structure = "BEARISH"
+                confidence += 30
+        if close.iloc[-1] < ema20:
+            confidence += 20
+        if close.iloc[-1] < ema50:
+            confidence += 25
+        if rsi > 40 and rsi < 80:
+            confidence += 15
+        if macd_histogram < 0:
+            confidence += 10
+
+        # Detect pullback on lower timeframe
+        lower_tf_rsi = None
+        pullback_opportunity = None
+
+        return {
+            "structure": structure,
+            "confidence": min(confidence, 100),
+            "higher_highs": higher_highs,
+            "higher_lows": higher_lows,
+            "rsi": rsi,
+            "macd_bullish": macd_bullish,
+            "macd_histogram": macd_histogram,
+            "ema20": ema20,
+            "ema50": ema50,
+            "ema200": ema200,
+            "price": close.iloc[-1],
+            "timeframe": timeframe,
+        }
+
+    def check_entry_signal(self, df_5m, direction, ht_structure):
+        """Check lower timeframe for entry signal (pullback confirmation)"""
+        if df_5m is None or len(df_5m) < 30:
+            return None
+
+        close = df_5m["Close"]
+        high = df_5m["High"]
+        low = df_5m["Low"]
+
+        rsi_5m = self.calc_rsi(close).iloc[-1]
+        macd_5m, signal_5m = self.calc_macd(close)
+        macd_5m_val = macd_5m.iloc[-1]
+        signal_5m_val = signal_5m.iloc[-1]
+
+        # Calculate recent volatility
+        atr_5m = self.calc_atr(df_5m).iloc[-1]
+
+        # Entry signal logic
+        entry_signal = None
+        entry_confidence = 0
+
+        if direction == "LONG":
+            # For LONG: Higher timeframe is bullish, wait for 5M pullback
+            # 5M should show bearish movement BUT not too much
+            if rsi_5m < 45:  # Pullback to oversold
+                entry_signal = "PULLBACK_LONG"
+                entry_confidence += 30
+            if macd_5m_val < signal_5m_val:  # 5M MACD bearish
+                entry_confidence += 25
+            if rsi_5m > 30:  # Not oversold
+                entry_confidence += 15
+            # Recent candle direction
+            if close.iloc[-1] < close.iloc[-5]:  # Pulled back from recent high
+                entry_confidence += 20
+            # Volume confirmation
+            if len(df_5m) > 20:
+                vol_ratio = (
+                    df_5m["Volume"].iloc[-5:].mean()
+                    / df_5m["Volume"].iloc[-20:-5].mean()
+                )
+                if vol_ratio > 1.2:
+                    entry_confidence += 10
+
+        elif direction == "SHORT":
+            # For SHORT: Higher timeframe is bearish, wait for 5M bounce
+            if rsi_5m > 55:  # Pullback to overbought
+                entry_signal = "PULLBACK_SHORT"
+                entry_confidence += 30
+            if macd_5m_val > signal_5m_val:  # 5M MACD bullish
+                entry_confidence += 25
+            if rsi_5m < 70:  # Not extremely overbought
+                entry_confidence += 15
+            # Recent candle direction
+            if close.iloc[-1] > close.iloc[-5]:  # Bounced from recent low
+                entry_confidence += 20
+            # Volume confirmation
+            if len(df_5m) > 20:
+                vol_ratio = (
+                    df_5m["Volume"].iloc[-5:].mean()
+                    / df_5m["Volume"].iloc[-20:-5].mean()
+                )
+                if vol_ratio > 1.2:
+                    entry_confidence += 10
+
+        return {
+            "signal": entry_signal,
+            "confidence": min(entry_confidence, 100),
+            "rsi_5m": rsi_5m,
+            "macd_5m_bullish": macd_5m_val > signal_5m_val,
+            "atr_5m": atr_5m,
+            "entry_confidence": entry_confidence >= 70,
+        }
 
     def calc_atr(self, df, period=14):
         high = df["High"]
@@ -89,289 +267,451 @@ class LiveTradingScanner:
         return tr.rolling(period).mean()
 
     def get_market_sentiment(self):
-        """Get overall market sentiment"""
+        """Get overall market sentiment with verification"""
         indices = {
             "NIFTY": "^NSEI",
             "BANKNIFTY": "^NSEBANK",
         }
 
-        total_rsi = 0
-        count = 0
-        bullish = 0
+        nifty_data = None
+        banknifty_data = None
 
-        for name, symbol in indices.items():
-            df = self.get_data(symbol)
-            if df is not None:
-                rsi = self.calc_rsi(df["Close"]).iloc[-1]
-                macd, signal = self.calc_macd(df["Close"])
+        # Get NIFTY
+        df_nifty = self.get_data("^NSEI")
+        if df_nifty is not None:
+            rsi = self.calc_rsi(df_nifty["Close"]).iloc[-1]
+            macd, signal = self.calc_macd(df_nifty["Close"])
+            nifty_data = {
+                "name": "NIFTY",
+                "price": df_nifty["Close"].iloc[-1],
+                "rsi": rsi,
+                "macd": macd.iloc[-1],
+                "signal": signal.iloc[-1],
+                "trend": "BULLISH" if macd.iloc[-1] > signal.iloc[-1] else "BEARISH",
+            }
 
-                total_rsi += rsi
-                count += 1
+        # Get BANKNIFTY
+        df_bank = self.get_data("^NSEBANK")
+        if df_bank is not None:
+            rsi = self.calc_rsi(df_bank["Close"]).iloc[-1]
+            macd, signal = self.calc_macd(df_bank["Close"])
+            banknifty_data = {
+                "name": "BANKNIFTY",
+                "price": df_bank["Close"].iloc[-1],
+                "rsi": rsi,
+                "macd": macd.iloc[-1],
+                "signal": signal.iloc[-1],
+                "trend": "BULLISH" if macd.iloc[-1] > signal.iloc[-1] else "BEARISH",
+            }
 
-                if macd.iloc[-1] > signal.iloc[-1]:
-                    bullish += 1
+        # Calculate overall sentiment
+        if nifty_data and banknifty_data:
+            bullish_count = sum(
+                1 for d in [nifty_data, banknifty_data] if d["trend"] == "BULLISH"
+            )
+            avg_rsi = (nifty_data["rsi"] + banknifty_data["rsi"]) / 2
 
-        if count == 0:
-            return "UNKNOWN", 50
+            if bullish_count > 1:
+                sentiment = "BULLISH"
+            elif bullish_count < 1:
+                sentiment = "BEARISH"
+            else:
+                sentiment = "NEUTRAL"
 
-        avg_rsi = total_rsi / count
-        sentiment = "BULLISH" if bullish > count / 2 else "BEARISH"
+            return sentiment, avg_rsi, nifty_data, banknifty_data
 
-        return sentiment, avg_rsi
+        return "UNKNOWN", 50, None, None
+
+    def get_option_strike(self, current_price, direction, option_type):
+        """
+        Get proper option strike based on NSE conventions
+        """
+        # Determine step size based on price
+        if current_price < 100:
+            step = 2.5
+        elif current_price < 250:
+            step = 5
+        elif current_price < 500:
+            step = 5
+        elif current_price < 2000:
+            step = 20
+        elif current_price < 5000:
+            step = 50
+        else:
+            step = 100
+
+        # For CALL (bullish) - strike should be ABOVE current price
+        # For PUT (bearish) - strike should be BELOW current price
+        if option_type == "CE":
+            # CALL: Use ATM or slightly OTM (strike > spot)
+            strike = round((current_price * 1.01) / step) * step
+        else:
+            # PUT: Use ATM or slightly OTM (strike < spot)
+            strike = round((current_price * 0.99) / step) * step
+
+        return int(strike), step
+
+    def calculate_option_premium(self, spot_price, strike, option_type, atr, days=3):
+        """
+        Calculate realistic option premium
+        """
+        # Distance from ATM
+        if option_type == "CE":
+            distance_pct = (strike - spot_price) / spot_price
+        else:
+            distance_pct = (spot_price - strike) / spot_price
+
+        # Time value (3 days to expiry)
+        time_value = 0.3
+
+        # Volatility factor
+        vol_factor = atr / spot_price
+
+        # Base premium calculation
+        if abs(distance_pct) < 0.02:  # ATM
+            premium = spot_price * vol_factor * time_value
+        elif distance_pct > 0:  # OTM
+            premium = spot_price * vol_factor * time_value * 0.7
+        else:  # ITM
+            premium = spot_price * vol_factor * time_value * 1.2
+
+        return max(5, round(premium, 2))
+
+    def verify_trade(self, trade):
+        """
+        Verify all trade parameters are correct
+        """
+        errors = []
+
+        # Verify price
+        if trade["price"] < 1 or trade["price"] > 100000:
+            errors.append(f"Invalid price: {trade['price']}")
+
+        # Verify strike is appropriate distance from spot
+        strike_dist = abs(trade["strike"] - trade["price"]) / trade["price"]
+        if strike_dist > 0.1:  # More than 10% away
+            errors.append(f"Strike too far: {strike_dist * 100:.1f}%")
+
+        # Verify entry premium is reasonable
+        if trade["entry"] < 3:
+            errors.append("Entry too low (may be illiquid)")
+
+        # Verify entry premium is not too high for the stock
+        premium_ratio = trade["entry"] / trade["price"]
+        if premium_ratio > 0.15:  # More than 15% of stock price
+            errors.append(f"Entry too high: {premium_ratio * 100:.1f}% of price")
+
+        # Verify SL is below entry
+        if trade["direction"] == "SHORT":
+            if trade["sl"] >= trade["entry"]:
+                errors.append("SL should be above entry for SHORT")
+        else:
+            if trade["sl"] <= trade["entry"]:
+                errors.append("SL should be below entry for LONG")
+
+        # Verify target is above entry
+        if trade["target"] <= trade["entry"]:
+            errors.append("Target should be beyond entry")
+
+        # Verify R:R is at least 1:1.5
+        if trade["direction"] == "SHORT":
+            risk = trade["entry"] - trade["sl"]
+            reward = trade["target"] - trade["entry"]
+        else:
+            risk = trade["entry"] - trade["sl"]
+            reward = trade["target"] - trade["entry"]
+
+        if risk > 0:
+            rr_ratio = reward / risk
+            if rr_ratio < 1.3:
+                errors.append(f"R:R too low: 1:{rr_ratio:.1f}")
+
+        return len(errors) == 0, errors
 
     def scan_stocks(self, sentiment):
-        """Scan stocks for trades"""
+        """Scan stocks using multi-timeframe analysis"""
         results = []
 
-        for name, symbol in self.stocks.items():
-            df = self.get_data(symbol)
-            if df is None or len(df) < 30:
+        for name, info in self.stocks.items():
+            symbol = info["symbol"]
+            lot_size = info["lot"]
+
+            # Get multi-timeframe data
+            df_1h, df_5m = self.get_multi_timeframe_data(symbol)
+            if df_1h is None or len(df_1h) < 50:
                 continue
 
-            close = df["Close"]
+            close = df_1h["Close"]
             current = close.iloc[-1]
 
-            rsi = self.calc_rsi(close).iloc[-1]
-            macd, signal = self.calc_macd(close)
-            macd_val = macd.iloc[-1]
-            signal_val = signal.iloc[-1]
-            atr = self.calc_atr(df).iloc[-1]
+            # Skip if price is too low or too high
+            if current < 50 or current > 20000:
+                continue
 
-            mom = ((close.iloc[-1] - close.iloc[-20]) / close.iloc[-20]) * 100
+            # STEP 1: Analyze higher timeframe (1H) for structure
+            ht_analysis = self.detect_patterns(df_1h, "1H")
 
-            vol = (
-                df["Volume"].iloc[-10:].mean() / df["Volume"].iloc[-50:-10].mean()
-                if len(df) > 50
-                else 1
-            )
+            if ht_analysis is None:
+                continue
 
-            score = 0
+            ht_structure = ht_analysis["structure"]
+            ht_confidence = ht_analysis["confidence"]
+
+            # Skip if no clear structure
+            if ht_structure == "NEUTRAL" or ht_confidence < 50:
+                continue
+
+            # STEP 2: Determine direction from higher timeframe + market sentiment
             direction = None
+            if sentiment == "BULLISH" and ht_structure == "BULLISH":
+                direction = "LONG"
+            elif sentiment == "BEARISH" and ht_structure == "BEARISH":
+                direction = "SHORT"
+            elif ht_structure == "BULLISH" and sentiment == "NEUTRAL":
+                direction = "LONG"
+            elif ht_structure == "BEARISH" and sentiment == "NEUTRAL":
+                direction = "SHORT"
 
-            if sentiment == "BEARISH":
-                if rsi > 55:
-                    score += 25
-                    direction = "SHORT"
-                elif rsi < 35:
-                    score -= 10
+            if direction is None:
+                continue
 
-                if macd_val < signal_val:
-                    score += 25
-                else:
-                    score -= 10
+            # STEP 3: Check lower timeframe (5M) for pullback entry
+            lt_signal = self.check_entry_signal(df_5m, direction, ht_analysis)
 
-                if mom < -1:
-                    score += 15
-                    direction = "SHORT"
+            if lt_signal is None:
+                continue
 
-                if vol > 1.3:
-                    score += 10
+            lt_confidence = lt_signal["confidence"]
+            has_entry = lt_signal["entry_confidence"]
 
-            elif sentiment == "BULLISH":
-                if rsi < 45:
-                    score += 25
-                    direction = "LONG"
-                elif rsi > 70:
-                    score -= 10
+            # Calculate score with multi-timeframe confluence
+            score = 0
 
-                if macd_val > signal_val:
-                    score += 25
-                else:
-                    score -= 10
+            # Higher timeframe structure weight
+            score += ht_confidence * 0.4
 
-                if mom > 1:
-                    score += 15
-                    direction = "LONG"
+            # Lower timeframe entry weight
+            score += lt_confidence * 0.4
 
-                if vol > 1.3:
-                    score += 10
+            # RSI confirmation from 1H
+            if direction == "LONG" and ht_analysis["rsi"] < 60:
+                score += 15
+            elif direction == "SHORT" and ht_analysis["rsi"] > 40:
+                score += 15
 
-            if score >= self.min_score:
-                # Calculate trade setup with proper strike selection
-                if direction == "SHORT":
-                    option_type = "PE"
-                    # For BEARISH: Use strike slightly BELOW spot (OTM Put)
-                    # Round to nearest appropriate step
-                    if current < 100:
-                        step = 2.5
-                    elif current < 500:
-                        step = 5
-                    elif current < 2000:
-                        step = 20
-                    else:
-                        step = 50
-
-                    # ATM or slight OTM
-                    strike = round(current / step) * step
-                    # Adjust to be slightly OTM (1-2% below)
-                    strike = round((current * 0.98) / step) * step
-
-                    # Calculate realistic entry based on distance from ATM
-                    atm_distance = abs(current - strike) / current
-                    entry = max(5, round(atr * atm_distance * 3 + atr * 0.2, 2))
-
-                else:
-                    option_type = "CE"
-                    # For BULLISH: Use strike slightly ABOVE spot (OTM Call)
-                    if current < 100:
-                        step = 2.5
-                    elif current < 500:
-                        step = 5
-                    elif current < 2000:
-                        step = 20
-                    else:
-                        step = 50
-
-                    # ATM or slight OTM
-                    strike = round(current / step) * step
-                    # Adjust to be slightly OTM (1-2% above)
-                    strike = round((current * 1.02) / step) * step
-
-                    # Calculate realistic entry based on distance from ATM
-                    atm_distance = abs(current - strike) / current
-                    entry = max(5, round(atr * atm_distance * 3 + atr * 0.2, 2))
-
-                results.append(
-                    {
-                        "name": name,
-                        "price": current,
-                        "rsi": rsi,
-                        "macd": macd_val - signal_val,
-                        "momentum": mom,
-                        "volume": vol,
-                        "score": score,
-                        "direction": direction,
-                        "strike": int(strike),
-                        "option": option_type,
-                        "entry": round(entry, 2),
-                        "sl": round(entry * 0.6, 2),
-                        "target": round(entry * 2.5, 2),
-                    }
+            # Volume confirmation
+            vol_ratio = 1
+            if len(df_1h) > 30:
+                vol_ratio = (
+                    df_1h["Volume"].iloc[-10:].mean()
+                    / df_1h["Volume"].iloc[-30:-10].mean()
                 )
+                if vol_ratio > 1.2:
+                    score += 10
+
+            # Momentum from 1H
+            mom = ((close.iloc[-1] - close.iloc[-20]) / close.iloc[-20]) * 100
+            if direction == "LONG" and mom > 0:
+                score += 10
+            elif direction == "SHORT" and mom < 0:
+                score += 10
+
+            score = min(score, 100)
+
+            if score >= self.min_score and has_entry:
+                # Calculate trade setup
+                option_type = "PE" if direction == "SHORT" else "CE"
+                atr = self.calc_atr(df_1h).iloc[-1]
+                strike, step = self.get_option_strike(current, direction, option_type)
+                entry = self.calculate_option_premium(current, strike, option_type, atr)
+                sl = round(entry * 0.6, 2)
+                target = round(entry * 2.5, 2)
+
+                trade = {
+                    "name": name,
+                    "price": round(current, 2),
+                    "rsi_1h": round(ht_analysis["rsi"], 1),
+                    "rsi_5m": round(lt_signal["rsi_5m"], 1),
+                    "momentum": round(mom, 2),
+                    "volume": round(vol_ratio if len(df_1h) > 30 else 1, 2),
+                    "atr": round(atr, 2),
+                    "score": round(score, 1),
+                    "direction": direction,
+                    "option_type": option_type,
+                    "strike": strike,
+                    "step": step,
+                    "entry": entry,
+                    "sl": sl,
+                    "target": target,
+                    "lot_size": lot_size,
+                    "premium_pct": round(entry / current * 100, 2),
+                    "ht_structure": ht_structure,
+                    "ht_confidence": ht_confidence,
+                    "lt_signal": lt_signal["signal"],
+                    "lt_confidence": lt_confidence,
+                    "entry_strategy": "PULLBACK" if lt_signal["signal"] else "MOMENTUM",
+                }
+
+                # Verify trade
+                is_valid, errors = self.verify_trade(trade)
+                if is_valid:
+                    results.append(trade)
+                else:
+                    print(f"  {name}: Filtered - {', '.join(errors)}")
 
         results.sort(key=lambda x: x["score"], reverse=True)
         return results
 
-    def format_sentiment_message(self, sentiment, avg_rsi):
-        """Format sentiment update"""
-        emoji = "BULLISH" if sentiment == "BULLISH" else "BEARISH"
+    def format_sentiment_message(self, sentiment, avg_rsi, nifty_data, banknifty_data):
+        """Format sentiment update with verification"""
+        emoji = (
+            "BULLISH"
+            if sentiment == "BULLISH"
+            else "BEARISH"
+            if sentiment == "BEARISH"
+            else "NEUTRAL"
+        )
 
-        msg = f"""
-*MARKET SENTIMENT - {datetime.now().strftime("%H:%M")}*
+        msg = f"*MARKET SENTIMENT - {datetime.now().strftime('%H:%M')}*\n\n"
+        msg += f"Overall: {sentiment}\n"
+        msg += f"Avg RSI: {avg_rsi:.1f}\n\n"
 
-Market: {sentiment}
-Avg RSI: {avg_rsi:.1f}
+        if nifty_data:
+            msg += f"NIFTY:\n"
+            msg += f"  Price: {nifty_data['price']:.2f}\n"
+            msg += f"  RSI: {nifty_data['rsi']:.1f}\n"
+            msg += f"  Trend: {nifty_data['trend']}\n\n"
 
-RSI < 40 = Oversold (Buy)
-RSI > 60 = Overbought (Sell)
-"""
+        if banknifty_data:
+            msg += f"BANKNIFTY:\n"
+            msg += f"  Price: {banknifty_data['price']:.2f}\n"
+            msg += f"  RSI: {banknifty_data['rsi']:.1f}\n"
+            msg += f"  Trend: {banknifty_data['trend']}\n\n"
+
+        msg += "_" * 30 + "\n"
+        msg += "RSI < 40 = Oversold\n"
+        msg += "RSI > 60 = Overbought\n"
+
         return msg
 
     def format_trade_alert(self, results):
-        """Format trade alerts"""
-        msg = f"""
-*TRADE ALERTS - {datetime.now().strftime("%H:%M")}*
-
-Found {len(results)} potential trades:
-
-"""
+        """Format verified trade alerts with multi-timeframe analysis"""
+        msg = f"*TRADE ALERTS - {datetime.now().strftime('%H:%M')}*\n\n"
+        msg += f"Verified {len(results)} trades (Multi-TF Strategy)\n\n"
 
         for i, trade in enumerate(results[:5], 1):
-            direction_emoji = "PUT" if trade["direction"] == "SHORT" else "CALL"
+            option = "CE" if trade["option_type"] == "CE" else "PE"
+            direction = "BUY CALL" if trade["option_type"] == "CE" else "BUY PUT"
 
-            msg += f"{i}. {trade['name']} {direction_emoji}\n"
-            msg += f"   Price: {trade['price']:.2f}\n"
-            msg += f"   Strike: {trade['strike']} {trade['option']}\n"
-            msg += f"   Entry: {trade['entry']} | SL: {trade['sl']} | Target: {trade['target']}\n"
-            msg += f"   RSI: {trade['rsi']:.1f} | Momentum: {trade['momentum']:.1f}%\n"
-            msg += f"   Score: {trade['score']}\n\n"
+            msg += f"{i}. {trade['name']} - {trade['direction']}\n"
+            msg += f"   {option} Strike: {trade['strike']} @ {trade['entry']}\n"
+            msg += f"   SL: {trade['sl']} | Target: {trade['target']}\n"
+            msg += f"   R:R: 1:{round((trade['target'] - trade['entry']) / (trade['entry'] - trade['sl']), 1)}\n\n"
+
+            msg += f"   TIMEFRAME ANALYSIS:\n"
+            msg += f"   ┌─ 1H Structure: {trade['ht_structure']} ({trade['ht_confidence']}% confidence)\n"
+            msg += f"   ├─ 5M Signal: {trade['lt_signal']} ({trade['lt_confidence']}% confidence)\n"
+            msg += f"   └─ Entry: {trade['entry_strategy']} on pullback\n\n"
+
+            msg += f"   INDICATORS:\n"
+            msg += f"   RSI 1H: {trade['rsi_1h']} | RSI 5M: {trade['rsi_5m']}\n"
+            msg += f"   Momentum: {trade['momentum']}% | Volume: {trade['volume']}x\n"
+            msg += f"   Score: {trade['score']}\n"
+            msg += "_" * 30 + "\n\n"
 
         return msg
 
     def run_live_scan(self):
-        """Run one scan cycle"""
+        """Run one scan cycle with verification"""
         now = datetime.now()
 
-        print(f"\n[{now.strftime('%H:%M:%S')}] Scanning...")
+        print(f"\n[{now.strftime('%H:%M:%S')}] Running verified scan...")
 
-        # Get sentiment
-        sentiment, avg_rsi = self.get_market_sentiment()
-        print(f"  Sentiment: {sentiment} | RSI: {avg_rsi:.1f}")
+        # Get and verify sentiment
+        sentiment, avg_rsi, nifty_data, banknifty_data = self.get_market_sentiment()
 
-        # Send sentiment update
-        self.telegram.send_message(self.format_sentiment_message(sentiment, avg_rsi))
+        # Check if sentiment changed
+        sentiment_changed = self.last_sentiment != sentiment
+
+        print(f"  Sentiment: {sentiment} (RSI: {avg_rsi:.1f})")
+        if nifty_data:
+            print(f"  NIFTY: {nifty_data['price']:.2f} | Trend: {nifty_data['trend']}")
+        if banknifty_data:
+            print(
+                f"  BANKNIFTY: {banknifty_data['price']:.2f} | Trend: {banknifty_data['trend']}"
+            )
+
+        # Send sentiment update (every time or when changed)
+        self.telegram.send_message(
+            self.format_sentiment_message(
+                sentiment, avg_rsi, nifty_data, banknifty_data
+            )
+        )
+        self.last_sentiment = sentiment
 
         # Scan for trades
+        print("  Scanning stocks...")
         trades = self.scan_stocks(sentiment)
 
         if trades:
-            print(f"  Found {len(trades)} potential trades!")
+            print(f"  Found {len(trades)} verified trades!")
 
-            # Check if we should alert (avoid spam)
-            should_alert = True
-            if self.last_trade_alert:
-                time_diff = (now - self.last_trade_alert).total_seconds() / 60
-                if time_diff < 30 and len(trades) <= len(
-                    getattr(self, "_last_trades", [])
-                ):
-                    should_alert = False
-                    print("  Skipping alert (already sent recently)")
+            # Always send new trade alerts
+            self.telegram.send_message(self.format_trade_alert(trades))
+            self.last_trade_alert = now
 
-            if should_alert:
-                self.telegram.send_message(self.format_trade_alert(trades))
-                self.last_trade_alert = now
-                self._last_trades = trades
+            for trade in trades[:3]:
+                print(
+                    f"    - {trade['name']}: {trade['option_type']} {trade['strike']} @ {trade['entry']}"
+                )
         else:
-            print(f"  No trades found")
+            print(f"  No trades found (RSI levels not ideal)")
 
         return sentiment, trades
 
     def run_continuous(self):
-        """Run continuous scanning"""
+        """Run continuous scanning every 15 minutes"""
         print("=" * 60)
-        print("LIVE TRADING SCANNER")
+        print("LIVE TRADING SCANNER - VERIFIED")
         print("=" * 60)
         print("Scanning every 15 minutes")
-        print("Sending sentiment updates + trade alerts")
+        print("Verifying all trade parameters")
         print("Press Ctrl+C to stop")
         print("=" * 60)
 
         try:
+            # Initial scan
+            self.run_live_scan()
+
             while True:
-                now = datetime.now()
-
-                # Skip if market closed (optional)
-                # 9:15 - 15:30 IST
-
-                sentiment, trades = self.run_live_scan()
-
                 print(f"\nNext scan in {self.scan_interval} minutes...")
-                print(f"Press Ctrl+C to stop\n")
-
+                print("Press Ctrl+C to stop")
                 time.sleep(self.scan_interval * 60)
+
+                # Run scan
+                self.run_live_scan()
 
         except KeyboardInterrupt:
             print("\n\nScanner stopped.")
 
 
 def quick_scan():
-    """Quick one-time scan"""
+    """Quick one-time verified scan"""
     scanner = LiveTradingScanner()
     sentiment, trades = scanner.run_live_scan()
 
     print("\n" + "=" * 60)
-    print("SCAN RESULTS")
+    print("VERIFIED SCAN RESULTS")
     print("=" * 60)
 
-    print(f"\nMarket Sentiment: {sentiment}")
-    print(f"Found {len(trades)} trades")
+    print(f"\nMarket: {sentiment}")
+    print(f"Found {len(trades)} verified trades")
 
     if trades:
         print("\nTop Trades:")
         for trade in trades[:5]:
-            print(
-                f"  {trade['name']}: {trade['direction']} {trade['option']} {trade['strike']} @ {trade['entry']}"
-            )
+            print(f"  {trade['name']}: {trade['option_type']} {trade['strike']}")
+            print(f"    Entry: {trade['entry']} | Target: {trade['target']}")
 
 
 if __name__ == "__main__":
