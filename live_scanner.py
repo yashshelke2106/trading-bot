@@ -187,15 +187,49 @@ class LiveTradingScanner:
                     score += 10
 
             if score >= self.min_score:
-                # Calculate trade setup
+                # Calculate trade setup with proper strike selection
                 if direction == "SHORT":
-                    strike = round(current * 0.99 / 5) * 5
                     option_type = "PE"
-                    entry = max(5, atr * 0.3)
+                    # For BEARISH: Use strike slightly BELOW spot (OTM Put)
+                    # Round to nearest appropriate step
+                    if current < 100:
+                        step = 2.5
+                    elif current < 500:
+                        step = 5
+                    elif current < 2000:
+                        step = 20
+                    else:
+                        step = 50
+
+                    # ATM or slight OTM
+                    strike = round(current / step) * step
+                    # Adjust to be slightly OTM (1-2% below)
+                    strike = round((current * 0.98) / step) * step
+
+                    # Calculate realistic entry based on distance from ATM
+                    atm_distance = abs(current - strike) / current
+                    entry = max(5, round(atr * atm_distance * 3 + atr * 0.2, 2))
+
                 else:
-                    strike = round(current * 1.01 / 5) * 5
                     option_type = "CE"
-                    entry = max(5, atr * 0.3)
+                    # For BULLISH: Use strike slightly ABOVE spot (OTM Call)
+                    if current < 100:
+                        step = 2.5
+                    elif current < 500:
+                        step = 5
+                    elif current < 2000:
+                        step = 20
+                    else:
+                        step = 50
+
+                    # ATM or slight OTM
+                    strike = round(current / step) * step
+                    # Adjust to be slightly OTM (1-2% above)
+                    strike = round((current * 1.02) / step) * step
+
+                    # Calculate realistic entry based on distance from ATM
+                    atm_distance = abs(current - strike) / current
+                    entry = max(5, round(atr * atm_distance * 3 + atr * 0.2, 2))
 
                 results.append(
                     {
@@ -211,7 +245,7 @@ class LiveTradingScanner:
                         "option": option_type,
                         "entry": round(entry, 2),
                         "sl": round(entry * 0.6, 2),
-                        "target": round(entry * 2, 2),
+                        "target": round(entry * 2.5, 2),
                     }
                 )
 
