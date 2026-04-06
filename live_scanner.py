@@ -353,29 +353,52 @@ class LiveTradingScanner:
 
     def calculate_option_premium(self, spot_price, strike, option_type, atr, days=3):
         """
-        Calculate realistic option premium
+        Calculate realistic option premium using proper IV model
         """
-        # Distance from ATM
+        # Distance from ATM (intrinsic value + time value)
         if option_type == "CE":
             distance_pct = (strike - spot_price) / spot_price
         else:
             distance_pct = (spot_price - strike) / spot_price
 
-        # Time value (3 days to expiry)
-        time_value = 0.3
+        # For Indian stocks, typical ATM premium is 1.5-2.5% of spot
+        # Adjust based on stock price volatility
+        base_premium_pct = 0.02  # 2% base
 
-        # Volatility factor
-        vol_factor = atr / spot_price
+        # Higher for high-priced stocks
+        if spot_price > 5000:
+            base_premium_pct = 0.015
+        elif spot_price > 2000:
+            base_premium_pct = 0.018
+        elif spot_price > 500:
+            base_premium_pct = 0.02
+        else:
+            base_premium_pct = 0.025  # Higher % for cheaper stocks
 
-        # Base premium calculation
-        if abs(distance_pct) < 0.02:  # ATM
-            premium = spot_price * vol_factor * time_value
-        elif distance_pct > 0:  # OTM
-            premium = spot_price * vol_factor * time_value * 0.7
-        else:  # ITM
-            premium = spot_price * vol_factor * time_value * 1.2
+        # ATM premium
+        atm_premium = spot_price * base_premium_pct
 
-        return max(5, round(premium, 2))
+        # Adjust for moneyness
+        if abs(distance_pct) < 0.01:  # Deep ATM (<1% from spot)
+            premium = atm_premium
+        elif abs(distance_pct) < 0.02:  # ATM (<2% from spot)
+            premium = atm_premium * 0.95
+        elif distance_pct > 0.03:  # OTM (>3% above for CE, >3% below for PE)
+            # OTM options have less premium
+            premium = atm_premium * 0.5
+            # Add some intrinsic if deep ITM
+            if distance_pct < 0:
+                premium += abs(strike - spot_price)
+        else:  # Slightly OTM (1-3%)
+            premium = atm_premium * 0.75
+
+        # Time value adjustment (3 days to expiry)
+        days_factor = min(days / 7, 1)  # Normalize to 1 week
+
+        # Final premium
+        premium = premium * (0.5 + days_factor * 0.5)
+
+        return max(8, round(premium, 2))
 
     def verify_trade(self, trade):
         """
